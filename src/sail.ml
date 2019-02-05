@@ -73,6 +73,8 @@ let opt_splice = ref ([]:string list)
 
 let set_target name = Arg.Unit (fun _ -> opt_target := Some name)
 
+let opt_print_llvm = ref None
+
 let options = Arg.align ([
   ( "-o",
     Arg.String (fun f -> opt_file_out := Some f),
@@ -223,6 +225,50 @@ let options = Arg.align ([
   ( "-trace",
     Arg.Tuple [Arg.Set Ocaml_backend.opt_trace_ocaml],
     " instrument output with tracing");
+  ( "-llvm",
+    Arg.Symbol ( ["instrinfo"; "operands"; "encoder"; "decoder"; "parser"; "printer"]
+               , fun ty ->
+                   Initial_check.opt_undefined_gen := true;
+                   match ty with
+                   | "instrinfo" -> opt_print_llvm := Some Llvm_backend.output_instrinfo_td
+                   | "operands" -> opt_print_llvm := Some Llvm_backend.output_operands_td
+                   | "encoder" -> opt_print_llvm := Some Llvm_backend.output_encoder_methods
+                   | "decoder" -> opt_print_llvm := Some Llvm_backend.output_decoder_methods
+                   | "parser" -> opt_print_llvm := Some Llvm_backend.output_parser_methods
+                   | "printer" -> opt_print_llvm := Some Llvm_backend.output_printer_methods
+                   | _ -> assert false
+               ),
+    " generate LLVM file");
+  ( "-llvm_inst_mapping_fun",
+    Arg.String (fun f -> Llvm_backend.opt_inst_mapping_fun := f),
+    " specify instruction mapping function for generating LLVM code (default: '" ^ !Llvm_backend.opt_inst_mapping_fun ^ "')");
+  ( "-llvm_inst_info_fun",
+    Arg.String (fun f -> Llvm_backend.opt_inst_info_fun := f),
+    " specify function for getting instruction info (default: '" ^ !Llvm_backend.opt_inst_info_fun ^ "')");
+  ( "-llvm_td_inst_base",
+    Arg.String (fun base -> Llvm_backend.opt_td_inst_base := base),
+    " specify base class of LLVM instruction TD record (default: '" ^ !Llvm_backend.opt_td_inst_base ^ "')");
+  ( "-llvm_td_prefix",
+    Arg.String (fun prefix -> Llvm_backend.opt_td_prefix := prefix),
+    " specify prefix of LLVM TD record");
+  ( "-llvm_class_name",
+    Arg.String (fun name -> Llvm_backend.opt_class_name := name),
+    " specify class name of generated C++ function");
+  ( "-llvm_namespace",
+    Arg.String (fun name -> Llvm_backend.opt_namespace := name),
+    " specify namespace of generated C++ identifier");
+  ( "-llvm_asm_mapping_fun",
+    Arg.String (fun f -> Llvm_backend.opt_asm_mapping_fun := f),
+    " specify assembly mapping function for generating LLVM code (default: '" ^ !Llvm_backend.opt_asm_mapping_fun ^ "')");
+  ( "-llvm_ast_type",
+    Arg.String (fun typ -> Llvm_backend.opt_ast_typ := typ),
+    " specify sail instruction type (default: '" ^ !Llvm_backend.opt_ast_typ ^ "')");
+  ( "-llvm_regid_type",
+    Arg.String (fun typ -> Llvm_backend.opt_regid_typ := typ),
+    " specify sail register type (default: '" ^ !Llvm_backend.opt_regid_typ ^ "')");
+  ( "-llvm_extimm_type",
+    Arg.String (fun typ -> Llvm_backend.opt_extimm_typ := typ),
+    " specify sail extended immediate type (default: '" ^ !Llvm_backend.opt_extimm_typ ^ "')");
   ( "-lem",
     set_target "lem",
     " output a Lem translated version of the input");
@@ -586,7 +632,14 @@ let main () =
         (Interactive.ast := ast; Interactive.env := type_envs)
       else ();
 
-      if !opt_memo_z3 then Constraint.save_digests () else ()
+      (if !opt_memo_z3 then Constraint.save_digests () else ());
+
+      (match !opt_print_llvm with
+       | Some output_fun ->
+           let ctx = Llvm_backend.initial_ctx type_envs in
+           Initial_check.opt_undefined_gen := true;
+           output_fun !opt_file_out ctx ast
+       | _ -> ());
     end
 
 let _ = try

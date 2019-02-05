@@ -85,7 +85,9 @@ val specialize : specialization -> Env.t -> tannot defs -> tannot defs * Env.t
 
 (** specialize' n performs at most n specialization passes. Useful for
    int_specialization which is not guaranteed to terminate. *)
-val specialize_passes : int -> specialization -> Env.t -> tannot defs -> tannot defs * Env.t
+val specialize_passes : ?keep_ids:IdSet.t -> int -> specialization -> Env.t -> tannot defs -> tannot defs * Env.t
+
+val specialize_and_keep_funs : IdSet.t -> specialization -> Env.t -> tannot defs -> tannot defs * Env.t
 
 (** return all instantiations of a function id, with the
    instantiations filtered according to the specialization. *)

@@ -556,7 +556,7 @@ let reorder_typedefs (Defs defs) =
   let others = filter_typedefs defs in
   Defs (List.rev !tdefs @ others)
 
-let specialize_ids spec ids ast =
+let specialize_ids keep_ids spec ids ast =
   let t = Profile.start () in
   let total = IdSet.cardinal ids in
   let _, ast =
@@ -584,11 +584,12 @@ let specialize_ids spec ids ast =
       (1, ast) (IdSet.elements ids)
   in
   let ast, env = Type_error.check Type_check.initial_env ast in
+  initial_calls := keep_ids;
   let ast = remove_unused_valspecs env ast in
   Profile.finish "specialization pass" t;
   ast, env
 
-let rec specialize_passes n spec env ast =
+let rec specialize_passes ?(keep_ids=(!initial_calls)) n spec env ast =
   if n = 0 then
     ast, env
   else
@@ -596,7 +597,9 @@ let rec specialize_passes n spec env ast =
     if IdSet.is_empty ids then
       ast, env
     else
-      let ast, env = specialize_ids spec ids ast in
-      specialize_passes (n - 1) spec env ast
+      let ast, env = specialize_ids keep_ids spec ids ast in
+      specialize_passes ~keep_ids (n - 1) spec env ast
 
 let specialize = specialize_passes (-1)
+
+let specialize_and_keep_funs keep_ids = specialize_passes ~keep_ids (-1)
