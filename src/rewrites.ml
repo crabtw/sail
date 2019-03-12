@@ -3312,6 +3312,30 @@ let rewrite_defs_pat_lits rewrite_lit env =
     let guards = ref [] in
     let counter = ref 0 in
 
+    let is_bit_lit (P_aux (pat, _)) = match pat with
+      | P_lit ((L_aux (lit, _) as lit_aux)) ->
+          begin match lit with
+          | L_zero | L_one -> rewrite_lit lit_aux
+          | _ -> false
+          end
+      | _ -> false
+    in
+
+    let rewrite_bitvec_pat = function
+      | P_vector elems, p_annot when List.for_all is_bit_lit elems ->
+         let env = env_of_annot p_annot in
+         let typ = typ_of_annot p_annot in
+         let id = mk_id ("p" ^ string_of_int !counter ^ "#") in
+         let exp = List.map (fun (P_aux (P_lit lit, _)) -> mk_exp (E_lit lit)) elems in
+         let guard = mk_exp (E_app_infix (mk_exp (E_id id), mk_id "==", mk_exp (E_vector exp))) in
+         let guard = check_exp (Env.add_local id (Immutable, typ) env) guard bool_typ in
+         guards := guard :: !guards;
+         incr counter;
+         P_aux (P_id id, p_annot)
+      | p_aux, p_annot ->
+         P_aux (p_aux, p_annot)
+    in
+
     let rewrite_pat = function
       (* Matching on unit is always the same as matching on wildcard *)
       | P_lit (L_aux (L_unit, _) as lit), p_annot when rewrite_lit lit ->
@@ -3332,6 +3356,7 @@ let rewrite_defs_pat_lits rewrite_lit env =
     match pexp_aux with
     | Pat_exp (pat, exp) ->
        begin
+         let pat = fold_pat { id_pat_alg with p_aux = rewrite_bitvec_pat } pat in
          let pat = fold_pat { id_pat_alg with p_aux = rewrite_pat } pat in
          match !guards with
          | [] -> Pat_aux (Pat_exp (pat, exp), annot)
@@ -3341,6 +3366,7 @@ let rewrite_defs_pat_lits rewrite_lit env =
        end
     | Pat_when (pat, guard, exp) ->
        begin
+         let pat = fold_pat { id_pat_alg with p_aux = rewrite_bitvec_pat } pat in
          let pat = fold_pat { id_pat_alg with p_aux = rewrite_pat } pat in
          let guard_annot = (fst annot, mk_tannot (env_of exp) bool_typ no_effect) in
          Pat_aux (Pat_when (pat, List.fold_left (fun g g' -> E_aux (E_app (mk_id "and_bool", [g; g']), guard_annot)) guard !guards, exp), annot)
